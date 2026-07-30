@@ -1,0 +1,7 @@
+conda config --set channel_priority flexible
+
+conda create --name analysis
+conda activate analysis
+conda install -c conda-forge spyder
+conda install matplotlib pandas numpy scipy
+
