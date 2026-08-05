@@ -2,14 +2,15 @@
 
 
 """
-Example script to extract CRU TS temperature and vapour pressure
-for a single grid cell and calculate vapour pressure deficit (VPD).
+Example script to extract HadUK-Grid temperature and vapour pressure
+for a single region and calculate vapour pressure deficit (VPD).
 
 Requires:
-    cru-ts-functions.py
+    hadukgrid-functions.py
 
 Input files:
-    CRU TS monthly NetCDF files containing:
+    HadUK-Grid monthly NetCDF files containing pre-computed regional
+    averages of:
         tmp  = mean temperature (degC)
         vap  = vapour pressure (hPa)
 
@@ -24,8 +25,9 @@ Output:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import xarray as xr
 
-from cru_ts_functions import extract_cru_ts
+from hadukgrid_functions import extract_haduk_region
 
 from climate_analysis_functions import seasonal_mean
 
@@ -39,21 +41,29 @@ import cartopy.feature as cfeature
 #%% User settings
 # ------------------------------------------------------------------
 
-# Location of interest
-lat = 52.63
-lon = 1.30
+# Region of interest
+regname = "Anglian"
 
 # Period to extract
-start_year = 1901
+start_year = 1961
 end_year = 2025
 
-# CRU TS files
-cru_ts_path = "/Users/f055/Documents/data/CRU-TS/"
-tmp_file = "cru-ts-v4.10-1901-2025-tmp-chunk.nc"
-vap_file = "cru-ts-v4.10-1901-2025-vap-chunk.nc"
+# HadUK-GRid files
+hadukgrid_path = "/Users/f055/Documents/data/HadUK-Grid/"
+tmp_file = "tas_hadukgrid_uk_river_mon_188401-202512.nc"
+vap_file = "pv_hadukgrid_uk_river_mon_196101-202512.nc"
 
-tmp_file = cru_ts_path + tmp_file
-vap_file = cru_ts_path + vap_file
+tmp_file = hadukgrid_path + tmp_file
+vap_file = hadukgrid_path + vap_file
+
+# List available region names, to help with choosing one
+
+ds = xr.open_dataset(vap_file)
+
+for chars in ds["geo_region"].values:
+    print("".join(chars.astype(str)).strip())
+
+
 
 
 # ------------------------------------------------------------------
@@ -68,28 +78,28 @@ vap_file = cru_ts_path + vap_file
 #
 # The series name will be "tmp"
 
-tmp = extract_cru_ts(
-    lat=lat,
-    lon=lon,
+tmp = extract_haduk_region(
     ncfile=tmp_file,
-    varname="tmp",
+    region_name=regname,
     start_year=start_year,
-    end_year=end_year,
+    end_year=end_year
 )
+
+
+
+
 
 # ------------------------------------------------------------------
 #%% Extract monthly mean vapour pressure
 # ------------------------------------------------------------------
 
-# CRU TS vapour pressure ("vap") is actual vapour pressure, in hPa.
+# HadUK-Grid vapour pressure ("vap") is actual vapour pressure, in hPa.
 
-vap = extract_cru_ts(
-    lat=lat,
-    lon=lon,
+vap = extract_haduk_region(
     ncfile=vap_file,
-    varname="vap",
+    region_name=regname,
     start_year=start_year,
-    end_year=end_year,
+    end_year=end_year
 )
 
 
@@ -106,6 +116,8 @@ vap = extract_cru_ts(
 
 df = pd.concat([tmp, vap], axis=1)
 
+# enforce CRU-TS variable names (HadUK-Grid uses pv not vap)
+df.columns = ["tmp", "vap"]
 
 # ------------------------------------------------------------------
 #%% Calculate saturation vapour pressure
@@ -171,64 +183,6 @@ print(df.head())
 
 
 
-# ----------------------------------------------------------
-#%% Create map showing selected CRU-TS grid cell
-# ----------------------------------------------------------
-
-# ------------------------------------------------------------------
-# Get grid-cell location from metadata
-# ------------------------------------------------------------------
-
-grid_lat = tmp.attrs["grid_lat"]
-grid_lon = tmp.attrs["grid_lon"]
-
-# CRU-TS grid spacing
-res = 0.5
-half = res / 2
-
-# Cell boundaries
-west  = grid_lon - half
-east  = grid_lon + half
-south = grid_lat - half
-north = grid_lat + half
-
-# Create map
-fig = plt.figure(figsize=(10, 10))
-ax = plt.axes(projection=ccrs.PlateCarree())
-
-# Zoom to vicinity of cell
-ax.set_extent([west - 3, east + 3, south - 2, north + 2])
-
-# Background features
-ax.coastlines(resolution='10m')
-ax.add_feature(cfeature.BORDERS, linewidth=0.5)
-ax.add_feature(cfeature.LAND, facecolor='lightgrey')
-ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
-
-# Draw grid-cell boundary
-ax.plot(
-    [west, east, east, west, west],
-    [south, south, north, north, south],
-    color='red',
-    linewidth=2,
-    transform=ccrs.PlateCarree()
-)
-
-# Mark centre
-ax.plot(
-    grid_lon, grid_lat,
-    marker='o',
-    color='red',
-    markersize=8,
-    transform=ccrs.PlateCarree()
-)
-
-plt.title(f"CRU-TS grid cell centred at {grid_lat:.2f}°N, {grid_lon:.2f}°E")
-plt.show()
-
-
-
-
 
 # ----------------------------------------------------------
 #%% Create monthly timeseries plots
@@ -241,15 +195,11 @@ plt.show()
 plot_df = df.loc["2000":"2025"]
 
 # ------------------------------------------------------------------
-# Get grid-cell location from metadata
+# Create region location string
 # ------------------------------------------------------------------
 
-grid_lat = tmp.attrs["grid_lat"]
-grid_lon = tmp.attrs["grid_lon"]
-
 location_string = (
-    f"CRU TS grid cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
+    f"HadUK-Grid River Basin Region: {regname}"
 )
 
 # ----------------------------------------------------------
@@ -348,15 +298,11 @@ month_names = [
 ]
 
 # ------------------------------------------------------------------
-# Get grid-cell location from metadata
+# Create region location string
 # ------------------------------------------------------------------
 
-grid_lat = tmp.attrs["grid_lat"]
-grid_lon = tmp.attrs["grid_lon"]
-
 location_string = (
-    f"CRU TS grid cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
+    f"HadUK-Grid River Basin Region: {regname}"
 )
 
 # ------------------------------------------------------------------
@@ -549,7 +495,7 @@ axes[2].grid(True, alpha=0.3)
 
 fig.suptitle(
     f"Seasonal Averages ({seas_name})\n"
-    f"CRU TS Grid Cell ({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
+    f"HadUK-Grid River Basin Region: {regname}"
 )
 
 plt.tight_layout()
@@ -697,8 +643,7 @@ ax.legend()
 
 fig.suptitle(
     f"Seasonal VPD ({seas_name})\n"
-    f"CRU TS Grid Cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
+    f"HadUK-Grid River Basin Region: {regname}"
 )
 
 fig.tight_layout()
@@ -716,11 +661,11 @@ plt.show()
 # too, and block bootstrapped uncertainty on the smooth line
 # ----------------------------------------------------------
 
-#seas_name = "March-June"
-#seas_def = [3,4,5,6]
+seas_name = "March-June"
+seas_def = [3,4,5,6]
 
-seas_name = "March-July"
-seas_def = [3,4,5,6,7]
+#seas_name = "March-July"
+#seas_def = [3,4,5,6,7]
 
 vpd_seas = seasonal_mean(df["vpd"], seas_def)
 print(vpd_seas.head())
@@ -873,8 +818,7 @@ ax.legend()
 
 fig.suptitle(
     f"Seasonal VPD ({seas_name})\n"
-    f"CRU TS Grid Cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
+    f"HadUK-Grid River Basin Region: {regname}"
 )
 
 fig.tight_layout()
