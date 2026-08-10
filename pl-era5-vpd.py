@@ -2,21 +2,21 @@
 
 
 """
-Example script to extract HadUK-Grid temperature and vapour pressure
-for a single region and calculate vapour pressure deficit (VPD).
+Example script to extract ERA5 temperature and dewpoint temperature
+for a single grid cell and calculate vapour pressure deficit (VPD).
 
 Requires:
-    hadukgrid_functions.py
+    era5_functions.py
 
 Input files:
-    HadUK-Grid monthly NetCDF files containing pre-computed regional
-    averages of:
-        tmp  = mean temperature (degC)
-        vap  = vapour pressure (hPa)
+    ERA5 monthly NetCDF file containing two variables in one file:
+        t2m  = mean temperature (K)
+        d2m  = mean dewpoint temperature (K)
 
 Output:
     pandas DataFrame with columns:
         tmp
+        dew
         vap
         vpd
         vpd_kPa
@@ -25,11 +25,11 @@ Output:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import xarray as xr
 
-from hadukgrid_functions import extract_haduk_region
+from era5_functions import extract_era5
 
 from climate_analysis_functions import seasonal_mean
+from climate_analysis_functions import saturation_vapour_pressure
 
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
@@ -41,33 +41,39 @@ import cartopy.feature as cfeature
 #%% User settings
 # ------------------------------------------------------------------
 
-# Region of interest
-regname = "Anglian"
+# Location of interest
+lat = 52.75
+lon = 1.25
 
 # Period to extract
-start_year = 1961
-end_year = 2025
+start_year = 1950     # not much upper air data before 1950, WWII data issues too
+end_year = 2026
 
-# HadUK-GRid files
-hadukgrid_path = "/Users/f055/Documents/data/HadUK-Grid/"
-tmp_file = "tas_hadukgrid_uk_river_mon_188401-202512.nc"
-vap_file = "pv_hadukgrid_uk_river_mon_196101-202512.nc"
+# ERA5 files
+era5_path = "/Users/f055/Documents/data/ERA5/"
 
-tmp_file = hadukgrid_path + tmp_file
-vap_file = hadukgrid_path + vap_file
+# If we have a specific file (e.g. subset of years)
 
-# List available region names, to help with choosing one
+#era5_file = (
+#    f"era5_monthly_t2m_d2m_"
+#    f"lat{lat:.2f}_lon{lon:.2f}_"
+#    f"{start_year}01-{end_year}12.nc"
+#)
 
-ds = xr.open_dataset(vap_file)
+# Full period file
 
-for chars in ds["geo_region"].values:
-    print("".join(chars.astype(str)).strip())
+era5_file = (
+    f"era5_monthly_t2m_d2m_"
+    f"lat{lat:.2f}_lon{lon:.2f}_194001-202612.nc"
+)
+
+era5_file = era5_path + era5_file
 
 
 
 
 # ------------------------------------------------------------------
-#%% Extract monthly mean temperature
+#%% Extract monthly mean temperature and dewpoint temperature
 # ------------------------------------------------------------------
 
 # Returns a pandas Series:
@@ -78,29 +84,25 @@ for chars in ds["geo_region"].values:
 #
 # The series name will be "tmp"
 
-tmp = extract_haduk_region(
-    ncfile=tmp_file,
-    region_name=regname,
+tmp = extract_era5(
+    lat=lat,
+    lon=lon,
+    ncfile=era5_file,
+    varname="t2m",
+    start_year=start_year,
+    end_year=end_year
+)
+
+d2m = extract_era5(
+    lat=lat,
+    lon=lon,
+    ncfile=era5_file,
+    varname="d2m",
     start_year=start_year,
     end_year=end_year
 )
 
 
-
-
-
-# ------------------------------------------------------------------
-#%% Extract monthly mean vapour pressure
-# ------------------------------------------------------------------
-
-# HadUK-Grid vapour pressure ("vap") is actual vapour pressure, in hPa.
-
-vap = extract_haduk_region(
-    ncfile=vap_file,
-    region_name=regname,
-    start_year=start_year,
-    end_year=end_year
-)
 
 
 # ------------------------------------------------------------------
@@ -114,10 +116,15 @@ vap = extract_haduk_region(
 #
 # indexed by monthly timestamps
 
-df = pd.concat([tmp, vap], axis=1)
 
-# enforce CRU-TS variable names (HadUK-Grid uses pv not vap)
-df.columns = ["tmp", "vap"]
+# Standardise names to match CRU-TS workflow
+
+tmp.name = "tmp"
+d2m.name = "dpt"
+
+df = pd.concat([tmp, d2m], axis=1)
+
+
 
 # ------------------------------------------------------------------
 #%% Calculate saturation vapour pressure
@@ -132,13 +139,12 @@ df.columns = ["tmp", "vap"]
 #     VPD calculated from monthly means is a slight underestimate of
 #     the true monthly mean VPD (typically a few percent).
 
-df["es"] = (
-    6.112 *
-    np.exp(
-        17.67 * df["tmp"] /
-        (df["tmp"] + 243.5)
-    )
-)
+df["es"] = saturation_vapour_pressure(df["tmp"])
+
+# Also calcluate actual vapour pressure
+
+df["vap"] = saturation_vapour_pressure(df["dpt"])
+
 
 
 # ------------------------------------------------------------------
@@ -155,6 +161,9 @@ df["vpd"] = df["es"] - df["vap"]
 # Replace any negative values with zero
 
 df["vpd"] = df["vpd"].clip(lower=0.0)
+
+
+
 
 
 # ------------------------------------------------------------------
@@ -183,6 +192,64 @@ print(df.head())
 
 
 
+# ----------------------------------------------------------
+#%% Create map showing selected CERA5 grid cell
+# ----------------------------------------------------------
+
+# ------------------------------------------------------------------
+# Get grid-cell location from metadata
+# ------------------------------------------------------------------
+
+grid_lat = tmp.attrs["grid_lat"]
+grid_lon = tmp.attrs["grid_lon"]
+
+# ERA5 grid spacing
+res = 0.25
+half = res / 2
+
+# Cell boundaries
+west  = grid_lon - half
+east  = grid_lon + half
+south = grid_lat - half
+north = grid_lat + half
+
+# Create map
+fig = plt.figure(figsize=(10, 10))
+ax = plt.axes(projection=ccrs.PlateCarree())
+
+# Zoom to vicinity of cell
+ax.set_extent([west - 3, east + 3, south - 2, north + 2])
+
+# Background features
+ax.coastlines(resolution='10m')
+ax.add_feature(cfeature.BORDERS, linewidth=0.5)
+ax.add_feature(cfeature.LAND, facecolor='lightgrey')
+ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+
+# Draw grid-cell boundary
+ax.plot(
+    [west, east, east, west, west],
+    [south, south, north, north, south],
+    color='red',
+    linewidth=2,
+    transform=ccrs.PlateCarree()
+)
+
+# Mark centre
+ax.plot(
+    grid_lon, grid_lat,
+    marker='o',
+    color='red',
+    markersize=8,
+    transform=ccrs.PlateCarree()
+)
+
+plt.title(f"ERA5 grid cell centred at {grid_lat:.2f}°N, {grid_lon:.2f}°E")
+plt.show()
+
+
+
+
 
 # ----------------------------------------------------------
 #%% Create monthly timeseries plots
@@ -192,14 +259,18 @@ print(df.head())
 # Select period to plot
 # ----------------------------------------------------------
 
-plot_df = df.loc["2000":"2025"]
+plot_df = df.loc["2000":"2026"]
 
 # ------------------------------------------------------------------
-# Create region location string
+# Get grid-cell location from metadata
 # ------------------------------------------------------------------
+
+grid_lat = tmp.attrs["grid_lat"]
+grid_lon = tmp.attrs["grid_lon"]
 
 location_string = (
-    f"HadUK-Grid River Basin Region: {regname}"
+    f"ERA5 grid cell "
+    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
 )
 
 # ----------------------------------------------------------
@@ -298,11 +369,15 @@ month_names = [
 ]
 
 # ------------------------------------------------------------------
-# Create region location string
+# Get grid-cell location from metadata
 # ------------------------------------------------------------------
 
+grid_lat = tmp.attrs["grid_lat"]
+grid_lon = tmp.attrs["grid_lon"]
+
 location_string = (
-    f"HadUK-Grid River Basin Region: {regname}"
+    f"ERA5 grid cell "
+    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
 )
 
 # ------------------------------------------------------------------
@@ -455,7 +530,7 @@ seas_def = [3,4,5,6]
 #seas_def = [3,4,5,6,7]
 
 tmp_seas = seasonal_mean(tmp, seas_def)
-vap_seas = seasonal_mean(vap, seas_def)
+vap_seas = seasonal_mean(df["vap"], seas_def)
 vpd_seas = seasonal_mean(df["vpd"], seas_def)
 print(tmp_seas.head())
 
@@ -495,7 +570,7 @@ axes[2].grid(True, alpha=0.3)
 
 fig.suptitle(
     f"Seasonal Averages ({seas_name})\n"
-    f"HadUK-Grid River Basin Region: {regname}"
+    f"ERA5 Grid Cell ({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
 )
 
 plt.tight_layout()
@@ -643,7 +718,8 @@ ax.legend()
 
 fig.suptitle(
     f"Seasonal VPD ({seas_name})\n"
-    f"HadUK-Grid River Basin Region: {regname}"
+    f"ERA5 Grid Cell "
+    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
 )
 
 fig.tight_layout()
@@ -657,15 +733,22 @@ plt.show()
 
 
 # ----------------------------------------------------------
-#%% Create seasonal-mean timeseries plots, with smoothed line
-# too, and block bootstrapped uncertainty on the smooth line
+#%% Create seasonal-mean timeseries plots, with smoothed line too, and block bootstrapped uncertainty on the smooth line
 # ----------------------------------------------------------
 
-seas_name = "March-June"
-seas_def = [3,4,5,6]
+#seas_name = "March-May"
+#seas_def = [3,4,5]
 
-#seas_name = "March-July"
-#seas_def = [3,4,5,6,7]
+#seas_name = "March-June"
+#seas_def = [3,4,5,6]
+
+seas_name = "March-July"
+seas_def = [3,4,5,6,7]
+
+#seas_name = "Febraury-July"
+#seas_def = [2,3,4,5,6,7]
+
+
 
 vpd_seas = seasonal_mean(df["vpd"], seas_def)
 print(vpd_seas.head())
@@ -818,7 +901,8 @@ ax.legend()
 
 fig.suptitle(
     f"Seasonal VPD ({seas_name})\n"
-    f"HadUK-Grid River Basin Region: {regname}"
+    f"ERA5 Grid Cell "
+    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
 )
 
 fig.tight_layout()

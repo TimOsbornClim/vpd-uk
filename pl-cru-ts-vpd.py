@@ -6,7 +6,7 @@ Example script to extract CRU TS temperature and vapour pressure
 for a single grid cell and calculate vapour pressure deficit (VPD).
 
 Requires:
-    cru-ts-functions.py
+    cru_ts_functions.py
 
 Input files:
     CRU TS monthly NetCDF files containing:

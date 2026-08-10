@@ -88,3 +88,32 @@ def seasonal_mean(series, months):
     return seasonal
 
 
+
+
+
+
+
+import numpy as np
+
+def saturation_vapour_pressure(temp_c):
+    """
+    Saturation vapour pressure (hPa)
+    from air temperature (°C).
+
+    Parameters
+    ----------
+    temp_c : scalar, numpy array, pandas Series, etc.
+
+    Returns
+    -------
+    Same type as input
+        Saturation vapour pressure (hPa)
+    """
+
+    return (
+        6.112
+        * np.exp(
+            17.67 * temp_c /
+            (temp_c + 243.5)
+        )
+    )
