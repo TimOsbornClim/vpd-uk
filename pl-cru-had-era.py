@@ -46,18 +46,31 @@ from climate_analysis_functions import saturation_vapour_pressure
 
 # What season to focus on?
 
+#seas_name = "April"
+#seas_def = [4]
+
 #seas_name = "March-May"
 #seas_def = [3,4,5]
 
 #seas_name = "March-June"
 #seas_def = [3,4,5,6]
 
-seas_name = "March-July"
-seas_def = [3,4,5,6,7]
+#seas_name = "March-July"
+#seas_def = [3,4,5,6,7]
 
 #seas_name = "Febraury-July"
 #seas_def = [2,3,4,5,6,7]
 
+seas_name = "April-July"
+seas_def = [4,5,6,7]
+
+# Adjust means to match HadUK?
+# 0 = no adjustment (not yet suppoprted)
+# 1 = means adjusted by additive offset
+# 2 = means adjusted by ultiplicative scaling factor
+# 3 = means and SDs adjusted by offset then scaling then offset
+
+adjust_means = 3
 
 # CRU-TS settings
 
@@ -107,6 +120,33 @@ era5_file = (
 )
 
 era5_file = era5_path + era5_file
+
+
+# HadUK-Grid settings
+
+# Region of interest
+had_regname = "Anglian"
+
+# Period to extract
+had_start_year = 1961
+had_end_year = 2025
+
+# HadUK-GRid files
+hadukgrid_path = "/Users/f055/Documents/data/HadUK-Grid/"
+had_tmp_file = "tas_hadukgrid_uk_river_mon_188401-202512.nc"
+had_vap_file = "pv_hadukgrid_uk_river_mon_196101-202512.nc"
+
+had_tmp_file = hadukgrid_path + had_tmp_file
+had_vap_file = hadukgrid_path + had_vap_file
+
+# List available region names, to help with choosing one
+
+ds = xr.open_dataset(had_vap_file)
+
+for chars in ds["geo_region"].values:
+    print("".join(chars.astype(str)).strip())
+
+
 
 
 
@@ -224,7 +264,7 @@ print(cru_df.head())
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-# cru_df.to_csv("norwich_vpd_timeseries.csv")
+# cru_df.to_csv("cru-ts_norwich_vpd_timeseries.csv")
 
 
 
@@ -289,10 +329,8 @@ era_d2m = extract_era5(
 )
 
 
-
-
 # ------------------------------------------------------------------
-#%% Combine variables into a single DataFrame
+# Combine variables into a single DataFrame
 # ------------------------------------------------------------------
 
 # Resulting columns:
@@ -302,19 +340,18 @@ era_d2m = extract_era5(
 #
 # indexed by monthly timestamps
 
-TO HERE!!!
-
 # Standardise names to match CRU-TS workflow
 
-tmp.name = "tmp"
-d2m.name = "dpt"
+era_tmp.name = "tmp"
+era_d2m.name = "dpt"
 
-df = pd.concat([tmp, d2m], axis=1)
+era_df = pd.concat([era_tmp, era_d2m], axis=1)
+
 
 
 
 # ------------------------------------------------------------------
-#%% Calculate saturation vapour pressure
+#%% Calculate ERA5 saturation vapour pressure and VPD
 # ------------------------------------------------------------------
 
 # Saturation vapour pressure (hPa) calculated from monthly mean
@@ -326,16 +363,15 @@ df = pd.concat([tmp, d2m], axis=1)
 #     VPD calculated from monthly means is a slight underestimate of
 #     the true monthly mean VPD (typically a few percent).
 
-df["es"] = saturation_vapour_pressure(df["tmp"])
+era_df["es"] = saturation_vapour_pressure(era_df["tmp"])
 
 # Also calcluate actual vapour pressure
 
-df["vap"] = saturation_vapour_pressure(df["dpt"])
-
+era_df["vap"] = saturation_vapour_pressure(era_df["dpt"])
 
 
 # ------------------------------------------------------------------
-#%% Calculate vapour pressure deficit
+# Calculate vapour pressure deficit
 # ------------------------------------------------------------------
 
 # VPD = saturation vapour pressure - actual vapour pressure
@@ -343,811 +379,65 @@ df["vap"] = saturation_vapour_pressure(df["dpt"])
 # Units:
 #     hPa
 
-df["vpd"] = df["es"] - df["vap"]
+era_df["vpd"] = era_df["es"] - era_df["vap"]
 
 # Replace any negative values with zero
 
-df["vpd"] = df["vpd"].clip(lower=0.0)
+era_df["vpd"] = era_df["vpd"].clip(lower=0.0)
 
 
-
-
-
-# ------------------------------------------------------------------
-#%% Convert to kPa
-# ------------------------------------------------------------------
-
-# Many plant-physiology and hydrology studies report
-# VPD in kPa rather than hPa.
-
-df["vpd_kPa"] = df["vpd"] / 10.0
 
 
 # ------------------------------------------------------------------
 #%% Example output
 # ------------------------------------------------------------------
 
-print(df.head())
+print(era_df.head())
 
 # ------------------------------------------------------------------
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-# df.to_csv("norwich_vpd_timeseries.csv")
-
-
-
-
-
-# ----------------------------------------------------------
-#%% Create map showing selected CERA5 grid cell
-# ----------------------------------------------------------
-
-# ------------------------------------------------------------------
-# Get grid-cell location from metadata
-# ------------------------------------------------------------------
-
-grid_lat = tmp.attrs["grid_lat"]
-grid_lon = tmp.attrs["grid_lon"]
-
-# ERA5 grid spacing
-res = 0.25
-half = res / 2
-
-# Cell boundaries
-west  = grid_lon - half
-east  = grid_lon + half
-south = grid_lat - half
-north = grid_lat + half
-
-# Create map
-fig = plt.figure(figsize=(10, 10))
-ax = plt.axes(projection=ccrs.PlateCarree())
-
-# Zoom to vicinity of cell
-ax.set_extent([west - 3, east + 3, south - 2, north + 2])
-
-# Background features
-ax.coastlines(resolution='10m')
-ax.add_feature(cfeature.BORDERS, linewidth=0.5)
-ax.add_feature(cfeature.LAND, facecolor='lightgrey')
-ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
-
-# Draw grid-cell boundary
-ax.plot(
-    [west, east, east, west, west],
-    [south, south, north, north, south],
-    color='red',
-    linewidth=2,
-    transform=ccrs.PlateCarree()
-)
-
-# Mark centre
-ax.plot(
-    grid_lon, grid_lat,
-    marker='o',
-    color='red',
-    markersize=8,
-    transform=ccrs.PlateCarree()
-)
-
-plt.title(f"ERA5 grid cell centred at {grid_lat:.2f}°N, {grid_lon:.2f}°E")
-plt.show()
-
+# df.to_csv("era5_norwich_vpd_timeseries.csv")
 
 
 
 
 # ----------------------------------------------------------
-#%% Create monthly timeseries plots
+#%% Create seasonal-mean timeseries
 # ----------------------------------------------------------
 
-# ----------------------------------------------------------
-# Select period to plot
-# ----------------------------------------------------------
+era_vpd_seas = seasonal_mean(era_df["vpd"], seas_def)
+print(era_vpd_seas.head())
 
-plot_df = df.loc["2000":"2026"]
 
-# ------------------------------------------------------------------
-# Get grid-cell location from metadata
-# ------------------------------------------------------------------
 
-grid_lat = tmp.attrs["grid_lat"]
-grid_lon = tmp.attrs["grid_lon"]
-
-location_string = (
-    f"ERA5 grid cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
-)
-
-# ----------------------------------------------------------
-# Create figure
-# ----------------------------------------------------------
-
-fig, axes = plt.subplots(
-    nrows=3,
-    ncols=1,
-    figsize=(12, 8),
-    sharex=True
-)
-
-# ----------------------------------------------------------
-# Mean temperature
-# ----------------------------------------------------------
-
-axes[0].plot(
-    plot_df.index,
-    plot_df["tmp"],
-    color="tab:red",
-    lw=0.8
-)
-
-axes[0].set_ylabel("Temperature (°C)")
-axes[0].set_title(location_string)
-axes[0].grid(True, alpha=0.3)
-
-# ----------------------------------------------------------
-# Vapour pressure
-# ----------------------------------------------------------
-
-axes[1].plot(
-    plot_df.index,
-    plot_df["vap"],
-    color="tab:blue",
-    lw=0.8
-)
-
-axes[1].set_ylabel("Vapour pressure (hPa)")
-axes[1].grid(True, alpha=0.3)
-
-# ----------------------------------------------------------
-# Vapour pressure deficit
-# ----------------------------------------------------------
-
-axes[2].plot(
-    plot_df.index,
-    plot_df["vpd"],
-    color="tab:green",
-    lw=0.8
-)
-
-axes[2].set_ylabel("VPD (hPa)")
-axes[2].set_xlabel("Year")
-axes[2].grid(True, alpha=0.3)
-
-# ----------------------------------------------------------
-# Tidy up
-# ----------------------------------------------------------
-
-fig.tight_layout()
-
-plt.show()
-
-
-
-# ----------------------------------------------------------
-#%% Create annual cyle plots
-# ----------------------------------------------------------
-
-import matplotlib.pyplot as plt
-
-# ------------------------------------------------------------------
-# Select period
-# ------------------------------------------------------------------
-
-plot_df = df.loc["2000":"2025"]
-
-# ------------------------------------------------------------------
-# Calculate monthly climatology statistics
-# ------------------------------------------------------------------
-
-grouped = plot_df.groupby(plot_df.index.month)
-
-clim_mean = grouped.mean()
-clim_std  = grouped.std()
-clim_min  = grouped.min()
-clim_max  = grouped.max()
-
-months = range(1, 13)
-
-month_names = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-]
-
-# ------------------------------------------------------------------
-# Get grid-cell location from metadata
-# ------------------------------------------------------------------
-
-grid_lat = tmp.attrs["grid_lat"]
-grid_lon = tmp.attrs["grid_lon"]
-
-location_string = (
-    f"ERA5 grid cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
-)
-
-# ------------------------------------------------------------------
-# Create figure
-# ------------------------------------------------------------------
-
-fig, axes = plt.subplots(
-    nrows=3,
-    ncols=1,
-    figsize=(9, 9),
-    sharex=True
-)
-
-# ==============================================================
-# Temperature
-# ==============================================================
-
-# Min-max envelope
-
-axes[0].fill_between(
-    months,
-    clim_min["tmp"],
-    clim_max["tmp"],
-    color="tab:red",
-    alpha=0.10,
-    label="Min-Max"
-)
-
-# ±1 sigma envelope
-
-axes[0].fill_between(
-    months,
-    clim_mean["tmp"] - clim_std["tmp"],
-    clim_mean["tmp"] + clim_std["tmp"],
-    color="tab:red",
-    alpha=0.30,
-    label="±1 SD"
-)
-
-# Mean
-
-axes[0].plot(
-    months,
-    clim_mean["tmp"],
-    "-o",
-    color="tab:red",
-    lw=2,
-    label="Mean"
-)
-
-axes[0].set_ylabel("Temperature (°C)")
-axes[0].set_title(
-    f"Mean Annual Cycle (2000–2025)\n{location_string}"
-)
-axes[0].grid(True, alpha=0.3)
-axes[0].legend(loc="upper left")
-
-# ==============================================================
-# Vapour pressure
-# ==============================================================
-
-axes[1].fill_between(
-    months,
-    clim_min["vap"],
-    clim_max["vap"],
-    color="tab:blue",
-    alpha=0.10
-)
-
-axes[1].fill_between(
-    months,
-    clim_mean["vap"] - clim_std["vap"],
-    clim_mean["vap"] + clim_std["vap"],
-    color="tab:blue",
-    alpha=0.30
-)
-
-axes[1].plot(
-    months,
-    clim_mean["vap"],
-    "-o",
-    color="tab:blue",
-    lw=2
-)
-
-axes[1].set_ylabel("Vapour Pressure (hPa)")
-axes[1].grid(True, alpha=0.3)
-
-# ==============================================================
-# Vapour pressure deficit
-# ==============================================================
-
-axes[2].fill_between(
-    months,
-    clim_min["vpd"],
-    clim_max["vpd"],
-    color="tab:green",
-    alpha=0.10
-)
-
-axes[2].fill_between(
-    months,
-    clim_mean["vpd"] - clim_std["vpd"],
-    clim_mean["vpd"] + clim_std["vpd"],
-    color="tab:green",
-    alpha=0.30
-)
-
-axes[2].plot(
-    months,
-    clim_mean["vpd"],
-    "-o",
-    color="tab:green",
-    lw=2
-)
-
-axes[2].set_ylabel("VPD (hPa)")
-axes[2].set_xlabel("Month")
-axes[2].grid(True, alpha=0.3)
-
-# ------------------------------------------------------------------
-# Month labels
-# ------------------------------------------------------------------
-
-axes[2].set_xticks(months)
-axes[2].set_xticklabels(month_names)
-
-# ------------------------------------------------------------------
-# Tidy up
-# ------------------------------------------------------------------
-
-fig.tight_layout()
-
-plt.show()
-
-
-
-
-
-
-
-# ----------------------------------------------------------
-#%% Create seasonal-mean timeseries plots
-# ----------------------------------------------------------
-
-seas_name = "March-June"
-seas_def = [3,4,5,6]
-
-#seas_name = "March-July"
-#seas_def = [3,4,5,6,7]
-
-tmp_seas = seasonal_mean(tmp, seas_def)
-vap_seas = seasonal_mean(df["vap"], seas_def)
-vpd_seas = seasonal_mean(df["vpd"], seas_def)
-print(tmp_seas.head())
-
-fig, axes = plt.subplots(
-    3, 1,
-    figsize=(10,8),
-    sharex=True
-)
-
-axes[0].plot(
-    tmp_seas.index,
-    tmp_seas.values,
-    color="tab:red"
-)
-
-axes[0].set_ylabel("Temperature (°C)")
-axes[0].grid(True, alpha=0.3)
-
-axes[1].plot(
-    vap_seas.index,
-    vap_seas.values,
-    color="tab:blue"
-)
-
-axes[1].set_ylabel("Vapour Pressure (hPa)")
-axes[1].grid(True, alpha=0.3)
-
-axes[2].plot(
-    vpd_seas.index,
-    vpd_seas.values,
-    color="tab:green"
-)
-
-axes[2].set_ylabel("VPD (hPa)")
-axes[2].set_xlabel("Year")
-axes[2].grid(True, alpha=0.3)
-
-fig.suptitle(
-    f"Seasonal Averages ({seas_name})\n"
-    f"ERA5 Grid Cell ({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
-)
-
-plt.tight_layout()
-plt.show()
-
-
-
-
-
-
-
-# ----------------------------------------------------------
-#%% Create seasonal-mean timeseries plots, with smoothed line too
-# ----------------------------------------------------------
-
-seas_name = "March-June"
-seas_def = [3,4,5,6]
-
-#seas_name = "March-July"
-#seas_def = [3,4,5,6,7]
-
-vpd_seas = seasonal_mean(df["vpd"], seas_def)
-print(vpd_seas.head())
-
-
-# ----------------------------------------------------------
-# Parameters
-# ----------------------------------------------------------
-
-smooth_years = 20
-nboot = 1000
-
-# ----------------------------------------------------------
-# Prepare data
-# ----------------------------------------------------------
-
-x = vpd_seas.index.values.astype(float)
-y = vpd_seas.values
-
-# Fraction of data used by LOESS
-# Approximately equivalent to a smooth_years window
-
-frac = smooth_years / len(x)
-
-# ----------------------------------------------------------
-# LOESS smooth
-# ----------------------------------------------------------
-
-y_loess = lowess(
-    y,
-    x,
-    frac=frac,
-    return_sorted=False
-)
-
-# ----------------------------------------------------------
-# Bootstrap confidence intervals
-# ----------------------------------------------------------
-
-residuals = y - y_loess
-
-boot_loess = np.zeros((nboot, len(y)))
-
-for iboot in range(nboot):
-
-    # Resample residuals with replacement
-
-    boot_resid = np.random.choice(
-        residuals,
-        size=len(residuals),
-        replace=True
-    )
-
-    y_boot = y_loess + boot_resid
-
-    boot_loess[iboot, :] = lowess(
-        y_boot,
-        x,
-        frac=frac,
-        return_sorted=False
-    )
-
-# 95% confidence interval
-
-ci_lower = np.percentile(
-    boot_loess,
-    2.5,
-    axis=0
-)
-
-ci_upper = np.percentile(
-    boot_loess,
-    97.5,
-    axis=0
-)
-
-# ----------------------------------------------------------
-# Plot
-# ----------------------------------------------------------
-
-fig, ax = plt.subplots(
-    figsize=(10,4)
-)
-
-# Bootstrap confidence band
-
-ax.fill_between(
-    x,
-    ci_lower,
-    ci_upper,
-    color="forestgreen",
-    alpha=0.15,
-    label="95% bootstrap CI"
-)
-
-# Raw seasonal values
-
-ax.plot(
-    x,
-    y,
-    color="darkolivegreen",
-    lw=0.8,
-    label=f"{seas_name} mean"
-)
-
-# LOESS smooth
-
-ax.plot(
-    x,
-    y_loess,
-    color="forestgreen",
-    lw=3,
-    label=f"{smooth_years}-yr LOESS"
-)
-
-ax.set_ylabel("VPD (hPa)")
-ax.set_xlabel("Year")
-
-ax.grid(
-    True,
-    alpha=0.3
-)
-
-ax.legend()
-
-fig.suptitle(
-    f"Seasonal VPD ({seas_name})\n"
-    f"ERA5 Grid Cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
-)
-
-fig.tight_layout()
-
-plt.show()
-
-
-
-
-
-
-
-# ----------------------------------------------------------
-#%% Create seasonal-mean timeseries plots, with smoothed line too, and block bootstrapped uncertainty on the smooth line
-# ----------------------------------------------------------
-
-
-
-
-vpd_seas = seasonal_mean(df["vpd"], seas_def)
-print(vpd_seas.head())
-
-
-# ----------------------------------------------------------
-# Parameters
-# ----------------------------------------------------------
-
-smooth_years = 30
-nboot = 1000       # usually choose 1000
-
-# ----------------------------------------------------------
-# Prepare data
-# ----------------------------------------------------------
-
-x = vpd_seas.index.values.astype(float)
-y = vpd_seas.values
-
-# Fraction of data used by LOESS
-# Approximately equivalent to a smooth_years window
-
-frac = smooth_years / len(x)
-
-# ----------------------------------------------------------
-# LOESS smooth
-# ----------------------------------------------------------
-
-y_loess = lowess(
-    y,
-    x,
-    frac=frac,
-    return_sorted=False
-)
-
-# ----------------------------------------------------------
-# Bootstrap confidence intervals
-# ----------------------------------------------------------
-
-def moving_block_bootstrap(residuals, block_length):
-
-    n = len(residuals)
-
-    # All possible starting points
-    starts = np.arange(n - block_length + 1)
-
-    bootstrap = []
-
-    while len(bootstrap) < n:
-
-        start = np.random.choice(starts)
-
-        block = residuals[
-            start:start + block_length
-        ]
-
-        bootstrap.extend(block)
-
-    return np.array(bootstrap[:n])
-
-
-
-
-block_length = 5
-
-residuals = y - y_loess
-
-boot_loess = np.zeros((nboot, len(y)))
-
-for iboot in range(nboot):
-
-    # Resample residuals with replacement (block bootstrap)
-
-    boot_resid = moving_block_bootstrap(
-        residuals,
-        block_length=5
-        )
-
-    y_boot = y_loess + boot_resid
-
-    boot_loess[iboot, :] = lowess(
-        y_boot,
-        x,
-        frac=frac,
-        return_sorted=False
-    )
-
-# 95% confidence interval
-
-ci_lower = np.percentile(
-    boot_loess,
-    2.5,
-    axis=0
-)
-
-ci_upper = np.percentile(
-    boot_loess,
-    97.5,
-    axis=0
-)
-
-# ----------------------------------------------------------
-# Plot
-# ----------------------------------------------------------
-
-fig, ax = plt.subplots(
-    figsize=(10,4)
-)
-
-# Bootstrap confidence band
-
-ax.fill_between(
-    x,
-    ci_lower,
-    ci_upper,
-    color="darkgreen",
-    alpha=0.15,
-    label="95% bootstrap CI"
-)
-
-# Raw seasonal values
-
-ax.plot(
-    x,
-    y,
-    color="dimgrey",
-    lw=0.8,
-    label=f"{seas_name} mean"
-)
-
-# LOESS smooth
-
-ax.plot(
-    x,
-    y_loess,
-    color="darkgreen",
-    lw=3,
-    label=f"{smooth_years}-yr LOESS"
-)
-
-ax.set_ylabel("VPD (hPa)")
-ax.set_xlabel("Year")
-
-ax.grid(
-    True,
-    alpha=0.3
-)
-
-ax.legend()
-
-fig.suptitle(
-    f"Seasonal VPD ({seas_name})\n"
-    f"ERA5 Grid Cell "
-    f"({grid_lat:.2f}°N, {grid_lon:.2f}°E)"
-)
-
-fig.tight_layout()
-
-plt.show()
-
-
-
-
-
-
-# -*- coding: utf-8 -*-
-
-
-"""
-Example script to extract HadUK-Grid temperature and vapour pressure
-for a single region and calculate vapour pressure deficit (VPD).
-
-Requires:
-    hadukgrid_functions.py
-
-Input files:
-    HadUK-Grid monthly NetCDF files containing pre-computed regional
-    averages of:
-        tmp  = mean temperature (degC)
-        vap  = vapour pressure (hPa)
-
-Output:
-    pandas DataFrame with columns:
-        tmp
-        vap
-        vpd
-        vpd_kPa
-"""
-
-
-
-# ------------------------------------------------------------------
-#%% User settings
-# ------------------------------------------------------------------
-
-# Region of interest
-regname = "Anglian"
-
-# Period to extract
-start_year = 1961
-end_year = 2025
-
-# HadUK-GRid files
-hadukgrid_path = "/Users/f055/Documents/data/HadUK-Grid/"
-tmp_file = "tas_hadukgrid_uk_river_mon_188401-202512.nc"
-vap_file = "pv_hadukgrid_uk_river_mon_196101-202512.nc"
-
-tmp_file = hadukgrid_path + tmp_file
-vap_file = hadukgrid_path + vap_file
-
-# List available region names, to help with choosing one
-
-ds = xr.open_dataset(vap_file)
-
-for chars in ds["geo_region"].values:
-    print("".join(chars.astype(str)).strip())
 
 
 
 
 # ------------------------------------------------------------------
-#%% Extract monthly mean temperature
+#%% Extract HadUK-Grid regional series monthly mean temperature and vapour pressure
 # ------------------------------------------------------------------
+
+# Example script to extract HadUK-Grid temperature and vapour pressure
+# for a single region and calculate vapour pressure deficit (VPD).
+#
+# Requires:
+#    hadukgrid_functions.py
+#
+# Input files:
+#    HadUK-Grid monthly NetCDF files containing pre-computed regional
+#    averages of:
+#        tmp  = mean temperature (degC)
+#        vap  = vapour pressure (hPa)
+#
+# Output:
+#    pandas DataFrame with columns:
+#        tmp
+#        vap
+#        vpd
+#        vpd_kPa
 
 # Returns a pandas Series:
 #
@@ -1157,33 +447,25 @@ for chars in ds["geo_region"].values:
 #
 # The series name will be "tmp"
 
-tmp = extract_haduk_region(
-    ncfile=tmp_file,
-    region_name=regname,
-    start_year=start_year,
-    end_year=end_year
+had_tmp = extract_haduk_region(
+    ncfile=had_tmp_file,
+    region_name=had_regname,
+    start_year=had_start_year,
+    end_year=had_end_year
 )
-
-
-
-
-
-# ------------------------------------------------------------------
-#%% Extract monthly mean vapour pressure
-# ------------------------------------------------------------------
 
 # HadUK-Grid vapour pressure ("vap") is actual vapour pressure, in hPa.
 
-vap = extract_haduk_region(
-    ncfile=vap_file,
-    region_name=regname,
-    start_year=start_year,
-    end_year=end_year
+had_vap = extract_haduk_region(
+    ncfile=had_vap_file,
+    region_name=had_regname,
+    start_year=had_start_year,
+    end_year=had_end_year
 )
 
 
 # ------------------------------------------------------------------
-#%% Combine variables into a single DataFrame
+# Combine variables into a single DataFrame
 # ------------------------------------------------------------------
 
 # Resulting columns:
@@ -1193,13 +475,16 @@ vap = extract_haduk_region(
 #
 # indexed by monthly timestamps
 
-df = pd.concat([tmp, vap], axis=1)
+had_df = pd.concat([had_tmp, had_vap], axis=1)
 
 # enforce CRU-TS variable names (HadUK-Grid uses pv not vap)
-df.columns = ["tmp", "vap"]
+had_df.columns = ["tmp", "vap"]
+
+
+
 
 # ------------------------------------------------------------------
-#%% Calculate saturation vapour pressure
+#%% Calculate saturation vapour pressure and VPD
 # ------------------------------------------------------------------
 
 # Saturation vapour pressure (hPa) calculated from monthly mean
@@ -1211,17 +496,10 @@ df.columns = ["tmp", "vap"]
 #     VPD calculated from monthly means is a slight underestimate of
 #     the true monthly mean VPD (typically a few percent).
 
-df["es"] = (
-    6.112 *
-    np.exp(
-        17.67 * df["tmp"] /
-        (df["tmp"] + 243.5)
-    )
-)
-
+had_df["es"] = saturation_vapour_pressure(had_df["tmp"])
 
 # ------------------------------------------------------------------
-#%% Calculate vapour pressure deficit
+# Calculate vapour pressure deficit
 # ------------------------------------------------------------------
 
 # VPD = saturation vapour pressure - actual vapour pressure
@@ -1229,34 +507,53 @@ df["es"] = (
 # Units:
 #     hPa
 
-df["vpd"] = df["es"] - df["vap"]
+had_df["vpd"] = had_df["es"] - had_df["vap"]
 
 # Replace any negative values with zero
 
-df["vpd"] = df["vpd"].clip(lower=0.0)
+had_df["vpd"] = had_df["vpd"].clip(lower=0.0)
 
 
-# ------------------------------------------------------------------
-#%% Convert to kPa
-# ------------------------------------------------------------------
-
-# Many plant-physiology and hydrology studies report
-# VPD in kPa rather than hPa.
-
-df["vpd_kPa"] = df["vpd"] / 10.0
 
 
 # ------------------------------------------------------------------
 #%% Example output
 # ------------------------------------------------------------------
 
-print(df.head())
+print(had_df.head())
 
 # ------------------------------------------------------------------
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-# df.to_csv("norwich_vpd_timeseries.csv")
+# had_df.to_csv("HadUK-grid-norwich_vpd_timeseries.csv")
+
+
+
+
+# ----------------------------------------------------------
+#%% Create HadUK-Grid seasonal-mean timeseries plots
+# ----------------------------------------------------------
+
+had_vpd_seas = seasonal_mean(had_df["vpd"], seas_def)
+print(had_vpd_seas.head())
+
+
+
+
+# ----------------------------------------------------------
+#%% Combine different dataset's seasonal mean series to enable comparison and plotting
+# ----------------------------------------------------------
+
+
+compare_df = pd.concat(
+    [
+        cru_vpd_seas.rename("CRU-TS"),
+        had_vpd_seas.rename("HadUK"),
+        era_vpd_seas.rename("ERA5")
+    ],
+    axis=1
+)
 
 
 
@@ -1264,322 +561,281 @@ print(df.head())
 
 
 # ----------------------------------------------------------
-#%% Create monthly timeseries plots
+#%% Compare different datasets
 # ----------------------------------------------------------
-
-# ----------------------------------------------------------
-# Select period to plot
-# ----------------------------------------------------------
-
-plot_df = df.loc["2000":"2025"]
 
 # ------------------------------------------------------------------
-# Create region location string
+# Pairwise correlations (full overlap for each pair)
 # ------------------------------------------------------------------
 
-location_string = (
-    f"HadUK-Grid River Basin Region: {regname}"
+corr_pairwise = compare_df.corr()
+
+print("\nPairwise correlations (full overlap period for each pair)")
+print(corr_pairwise)
+
+# ------------------------------------------------------------------
+# Common overlap period
+# ------------------------------------------------------------------
+
+common_df = compare_df.dropna()
+
+print("\nCommon overlap period:")
+print(f"{common_df.index.min()}-{common_df.index.max()}")
+
+# ------------------------------------------------------------------
+# Correlations over common overlap period
+# ------------------------------------------------------------------
+
+corr_common = common_df.corr()
+
+print("\nCorrelations over common overlap period")
+print(corr_common)
+
+# ------------------------------------------------------------------
+# Means over common overlap period
+# ------------------------------------------------------------------
+
+mean_common = common_df.mean()
+
+print("\nMeans over common overlap period")
+print(mean_common)
+
+
+
+# ------------------------------------------------------------------
+# Adjust CRU-TS and ERA5 means to match HadUK
+# ------------------------------------------------------------------
+
+# Create adjusted dataframe (includes unadjusted series too)
+
+compare_adj_df = compare_df.copy()
+
+
+# Means
+
+had_mean = common_df["HadUK"].mean()
+cru_mean = common_df["CRU-TS"].mean()
+era_mean = common_df["ERA5"].mean()
+
+# Standard deviations
+
+had_sd = common_df["HadUK"].std()
+cru_sd = common_df["CRU-TS"].std()
+era_sd = common_df["ERA5"].std()
+
+print("\nCommon-period statistics")
+
+print(f"HadUK  Mean={had_mean:.3f}  SD={had_sd:.3f}")
+print(f"CRU    Mean={cru_mean:.3f}  SD={cru_sd:.3f}")
+print(f"ERA5   Mean={era_mean:.3f}  SD={era_sd:.3f}")
+
+# Make means adjustments
+
+if adjust_means == 0:
+
+    # no adjustment
+
+    raise ValueError(
+        f"No adjustment not yet supported adjust_means={adjust_means}"
+    )
+
+
+
+elif adjust_means == 1:
+
+    # This adjusts means to match via additive offset
+
+    cru_adjustment = had_mean - cru_mean
+    era_adjustment = had_mean - era_mean
+
+    print("\nAdditive mean adjustments")
+    print(f"CRU-TS adjustment = {cru_adjustment:.3f} hPa")
+    print(f"ERA5 adjustment   = {era_adjustment:.3f} hPa")
+    
+    compare_adj_df["CRU-TS_adj"] = (
+        compare_df["CRU-TS"] + cru_adjustment
+    )
+
+    compare_adj_df["ERA5_adj"] = (
+        compare_df["ERA5"] + era_adjustment
+    )
+
+    compare_adj_df["HadUK_adj"] = (
+        compare_df["HadUK"]
+    )
+
+    
+    
+elif adjust_means == 2:
+
+    # This adjusts means to match via scaling factor (may be more suited to zero-bounded variabels)
+
+    cru_adjustment = had_mean / cru_mean
+    era_adjustment = had_mean / era_mean
+
+    print("\nMultiplicative mean adjustments")
+    print(f"CRU-TS adjustment = {cru_adjustment:.3f} scaling factor")
+    print(f"ERA5 adjustment   = {era_adjustment:.3f} scaling factor")
+    
+    compare_adj_df["CRU-TS_adj"] = (
+        compare_df["CRU-TS"] * cru_adjustment
+    )
+
+    compare_adj_df["ERA5_adj"] = (
+        compare_df["ERA5"] * era_adjustment
+    )
+
+    compare_adj_df["HadUK_adj"] = (
+        compare_df["HadUK"]
+    )
+
+
+elif adjust_means == 3:
+
+    # This adjusts means and variance to match
+    # May need to ensure any negative values are replaced by zero
+
+    cru_adjustment = had_mean - cru_mean
+    era_adjustment = had_mean - era_mean
+
+    print("\nAdditive mean adjustments")
+    print(f"CRU-TS adjustment = {cru_adjustment:.3f} hPa")
+    print(f"ERA5 adjustment   = {era_adjustment:.3f} hPa")
+    
+    cru_sdadjustment = had_sd / cru_sd
+    era_sdadjustment = had_sd / era_sd
+
+    print("\Scaling SD adjustments")
+    print(f"CRU-TS adjustment = {cru_sdadjustment:.3f}")
+    print(f"ERA5 adjustment   = {era_sdadjustment:.3f}")
+    
+    compare_adj_df["CRU-TS_adj"] = (
+        had_mean
+        + (compare_df["CRU-TS"] - cru_mean)
+        * (had_sd / cru_sd)
+    )
+
+    compare_adj_df["ERA5_adj"] = (
+        had_mean
+        + (compare_df["ERA5"] - era_mean)
+        * (had_sd / era_sd)
+    )
+
+    compare_adj_df["HadUK_adj"] = compare_df["HadUK"]
+
+
+
+
+
+else:
+
+    raise ValueError(
+        f"Unsupported adjust_means={adjust_means}"
+    )
+
+
+
+# Sanity check: the means over the common overlap period should now match
+
+check_df = compare_adj_df[
+    ["CRU-TS_adj", "HadUK_adj", "ERA5_adj"]
+].dropna()
+
+print("\nAdjusted means over common overlap period")
+
+print(check_df.mean())
+
+print("\nAdjusted SDs over common overlap period")
+
+print(check_df.std())
+
+
+
+
+# ------------------------------------------------------------------
+# Multi-dataset average
+# ------------------------------------------------------------------
+
+compare_adj_df["MULTI"] = (
+    compare_adj_df[
+        ["CRU-TS_adj", "HadUK_adj", "ERA5_adj"]
+    ]
+    .mean(axis=1)
 )
 
+
+
 # ----------------------------------------------------------
-# Create figure
+#%% Create seasonal-mean timeseries plots, with original data
 # ----------------------------------------------------------
 
-fig, axes = plt.subplots(
-    nrows=3,
-    ncols=1,
-    figsize=(12, 8),
-    sharex=True
+
+
+fig, ax = plt.subplots(figsize=(10,5))
+
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["CRU-TS"],
+    label="CRU-TS"
 )
 
-# ----------------------------------------------------------
-# Mean temperature
-# ----------------------------------------------------------
-
-axes[0].plot(
-    plot_df.index,
-    plot_df["tmp"],
-    color="tab:red",
-    lw=0.8
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["HadUK"],
+    label="HadUK"
 )
 
-axes[0].set_ylabel("Temperature (°C)")
-axes[0].set_title(location_string)
-axes[0].grid(True, alpha=0.3)
-
-# ----------------------------------------------------------
-# Vapour pressure
-# ----------------------------------------------------------
-
-axes[1].plot(
-    plot_df.index,
-    plot_df["vap"],
-    color="tab:blue",
-    lw=0.8
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["ERA5"],
+    label="ERA5"
 )
 
-axes[1].set_ylabel("Vapour pressure (hPa)")
-axes[1].grid(True, alpha=0.3)
+ax.set_ylabel("VPD (hPa)")
+ax.set_xlabel("Year")
 
-# ----------------------------------------------------------
-# Vapour pressure deficit
-# ----------------------------------------------------------
-
-axes[2].plot(
-    plot_df.index,
-    plot_df["vpd"],
-    color="tab:green",
-    lw=0.8
-)
-
-axes[2].set_ylabel("VPD (hPa)")
-axes[2].set_xlabel("Year")
-axes[2].grid(True, alpha=0.3)
-
-# ----------------------------------------------------------
-# Tidy up
-# ----------------------------------------------------------
-
-fig.tight_layout()
+ax.grid(True, alpha=0.3)
+ax.legend()
 
 plt.show()
 
 
 
+
+
 # ----------------------------------------------------------
-#%% Create annual cyle plots
+#%% Create seasonal-mean timeseries plots, with mean-adjusted data
 # ----------------------------------------------------------
 
-import matplotlib.pyplot as plt
 
-# ------------------------------------------------------------------
-# Select period
-# ------------------------------------------------------------------
 
-plot_df = df.loc["2000":"2025"]
+fig, ax = plt.subplots(figsize=(10,5))
 
-# ------------------------------------------------------------------
-# Calculate monthly climatology statistics
-# ------------------------------------------------------------------
-
-grouped = plot_df.groupby(plot_df.index.month)
-
-clim_mean = grouped.mean()
-clim_std  = grouped.std()
-clim_min  = grouped.min()
-clim_max  = grouped.max()
-
-months = range(1, 13)
-
-month_names = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-]
-
-# ------------------------------------------------------------------
-# Create region location string
-# ------------------------------------------------------------------
-
-location_string = (
-    f"HadUK-Grid River Basin Region: {regname}"
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["CRU-TS_adj"],
+    label="CRU-TS (mean-adjusted)"
 )
 
-# ------------------------------------------------------------------
-# Create figure
-# ------------------------------------------------------------------
-
-fig, axes = plt.subplots(
-    nrows=3,
-    ncols=1,
-    figsize=(9, 9),
-    sharex=True
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["HadUK_adj"],
+    label="HadUK"
 )
 
-# ==============================================================
-# Temperature
-# ==============================================================
-
-# Min-max envelope
-
-axes[0].fill_between(
-    months,
-    clim_min["tmp"],
-    clim_max["tmp"],
-    color="tab:red",
-    alpha=0.10,
-    label="Min-Max"
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["ERA5_adj"],
+    label="ERA5 (mean-adjusted)"
 )
 
-# ±1 sigma envelope
+ax.set_ylabel("VPD (hPa)")
+ax.set_xlabel("Year")
 
-axes[0].fill_between(
-    months,
-    clim_mean["tmp"] - clim_std["tmp"],
-    clim_mean["tmp"] + clim_std["tmp"],
-    color="tab:red",
-    alpha=0.30,
-    label="±1 SD"
-)
-
-# Mean
-
-axes[0].plot(
-    months,
-    clim_mean["tmp"],
-    "-o",
-    color="tab:red",
-    lw=2,
-    label="Mean"
-)
-
-axes[0].set_ylabel("Temperature (°C)")
-axes[0].set_title(
-    f"Mean Annual Cycle (2000–2025)\n{location_string}"
-)
-axes[0].grid(True, alpha=0.3)
-axes[0].legend(loc="upper left")
-
-# ==============================================================
-# Vapour pressure
-# ==============================================================
-
-axes[1].fill_between(
-    months,
-    clim_min["vap"],
-    clim_max["vap"],
-    color="tab:blue",
-    alpha=0.10
-)
-
-axes[1].fill_between(
-    months,
-    clim_mean["vap"] - clim_std["vap"],
-    clim_mean["vap"] + clim_std["vap"],
-    color="tab:blue",
-    alpha=0.30
-)
-
-axes[1].plot(
-    months,
-    clim_mean["vap"],
-    "-o",
-    color="tab:blue",
-    lw=2
-)
-
-axes[1].set_ylabel("Vapour Pressure (hPa)")
-axes[1].grid(True, alpha=0.3)
-
-# ==============================================================
-# Vapour pressure deficit
-# ==============================================================
-
-axes[2].fill_between(
-    months,
-    clim_min["vpd"],
-    clim_max["vpd"],
-    color="tab:green",
-    alpha=0.10
-)
-
-axes[2].fill_between(
-    months,
-    clim_mean["vpd"] - clim_std["vpd"],
-    clim_mean["vpd"] + clim_std["vpd"],
-    color="tab:green",
-    alpha=0.30
-)
-
-axes[2].plot(
-    months,
-    clim_mean["vpd"],
-    "-o",
-    color="tab:green",
-    lw=2
-)
-
-axes[2].set_ylabel("VPD (hPa)")
-axes[2].set_xlabel("Month")
-axes[2].grid(True, alpha=0.3)
-
-# ------------------------------------------------------------------
-# Month labels
-# ------------------------------------------------------------------
-
-axes[2].set_xticks(months)
-axes[2].set_xticklabels(month_names)
-
-# ------------------------------------------------------------------
-# Tidy up
-# ------------------------------------------------------------------
-
-fig.tight_layout()
+ax.grid(True, alpha=0.3)
+ax.legend()
 
 plt.show()
-
-
-
-
-
-
-
-# ----------------------------------------------------------
-#%% Create seasonal-mean timeseries plots
-# ----------------------------------------------------------
-
-seas_name = "March-June"
-seas_def = [3,4,5,6]
-
-#seas_name = "March-July"
-#seas_def = [3,4,5,6,7]
-
-tmp_seas = seasonal_mean(tmp, seas_def)
-vap_seas = seasonal_mean(vap, seas_def)
-vpd_seas = seasonal_mean(df["vpd"], seas_def)
-print(tmp_seas.head())
-
-fig, axes = plt.subplots(
-    3, 1,
-    figsize=(10,8),
-    sharex=True
-)
-
-axes[0].plot(
-    tmp_seas.index,
-    tmp_seas.values,
-    color="tab:red"
-)
-
-axes[0].set_ylabel("Temperature (°C)")
-axes[0].grid(True, alpha=0.3)
-
-axes[1].plot(
-    vap_seas.index,
-    vap_seas.values,
-    color="tab:blue"
-)
-
-axes[1].set_ylabel("Vapour Pressure (hPa)")
-axes[1].grid(True, alpha=0.3)
-
-axes[2].plot(
-    vpd_seas.index,
-    vpd_seas.values,
-    color="tab:green"
-)
-
-axes[2].set_ylabel("VPD (hPa)")
-axes[2].set_xlabel("Year")
-axes[2].grid(True, alpha=0.3)
-
-fig.suptitle(
-    f"Seasonal Averages ({seas_name})\n"
-    f"HadUK-Grid River Basin Region: {regname}"
-)
-
-plt.tight_layout()
-plt.show()
-
 
 
 
@@ -1590,188 +846,28 @@ plt.show()
 #%% Create seasonal-mean timeseries plots, with smoothed line too
 # ----------------------------------------------------------
 
-seas_name = "March-June"
-seas_def = [3,4,5,6]
-
-#seas_name = "March-July"
-#seas_def = [3,4,5,6,7]
-
-vpd_seas = seasonal_mean(df["vpd"], seas_def)
-print(vpd_seas.head())
-
-
-# ----------------------------------------------------------
+# ------------------------------------------------------------------
 # Parameters
-# ----------------------------------------------------------
+# ------------------------------------------------------------------
 
-smooth_years = 20
+block_length = 5
 nboot = 1000
+smooth_years = 20
 
-# ----------------------------------------------------------
-# Prepare data
-# ----------------------------------------------------------
+# ------------------------------------------------------------------
+# Input series for smoothed line: the multi-dataset mean
+# ------------------------------------------------------------------
 
-x = vpd_seas.index.values.astype(float)
-y = vpd_seas.values
+multi = compare_adj_df["MULTI"].dropna()
 
-# Fraction of data used by LOESS
-# Approximately equivalent to a smooth_years window
-
-frac = smooth_years / len(x)
-
-# ----------------------------------------------------------
-# LOESS smooth
-# ----------------------------------------------------------
-
-y_loess = lowess(
-    y,
-    x,
-    frac=frac,
-    return_sorted=False
-)
-
-# ----------------------------------------------------------
-# Bootstrap confidence intervals
-# ----------------------------------------------------------
-
-residuals = y - y_loess
-
-boot_loess = np.zeros((nboot, len(y)))
-
-for iboot in range(nboot):
-
-    # Resample residuals with replacement
-
-    boot_resid = np.random.choice(
-        residuals,
-        size=len(residuals),
-        replace=True
-    )
-
-    y_boot = y_loess + boot_resid
-
-    boot_loess[iboot, :] = lowess(
-        y_boot,
-        x,
-        frac=frac,
-        return_sorted=False
-    )
-
-# 95% confidence interval
-
-ci_lower = np.percentile(
-    boot_loess,
-    2.5,
-    axis=0
-)
-
-ci_upper = np.percentile(
-    boot_loess,
-    97.5,
-    axis=0
-)
-
-# ----------------------------------------------------------
-# Plot
-# ----------------------------------------------------------
-
-fig, ax = plt.subplots(
-    figsize=(10,4)
-)
-
-# Bootstrap confidence band
-
-ax.fill_between(
-    x,
-    ci_lower,
-    ci_upper,
-    color="forestgreen",
-    alpha=0.15,
-    label="95% bootstrap CI"
-)
-
-# Raw seasonal values
-
-ax.plot(
-    x,
-    y,
-    color="darkolivegreen",
-    lw=0.8,
-    label=f"{seas_name} mean"
-)
-
-# LOESS smooth
-
-ax.plot(
-    x,
-    y_loess,
-    color="forestgreen",
-    lw=3,
-    label=f"{smooth_years}-yr LOESS"
-)
-
-ax.set_ylabel("VPD (hPa)")
-ax.set_xlabel("Year")
-
-ax.grid(
-    True,
-    alpha=0.3
-)
-
-ax.legend()
-
-fig.suptitle(
-    f"Seasonal VPD ({seas_name})\n"
-    f"HadUK-Grid River Basin Region: {regname}"
-)
-
-fig.tight_layout()
-
-plt.show()
-
-
-
-
-
-
-
-# ----------------------------------------------------------
-#%% Create seasonal-mean timeseries plots, with smoothed line
-# too, and block bootstrapped uncertainty on the smooth line
-# ----------------------------------------------------------
-
-seas_name = "March-June"
-seas_def = [3,4,5,6]
-
-#seas_name = "March-July"
-#seas_def = [3,4,5,6,7]
-
-vpd_seas = seasonal_mean(df["vpd"], seas_def)
-print(vpd_seas.head())
-
-
-# ----------------------------------------------------------
-# Parameters
-# ----------------------------------------------------------
-
-smooth_years = 30
-nboot = 1000       # usually choose 1000
-
-# ----------------------------------------------------------
-# Prepare data
-# ----------------------------------------------------------
-
-x = vpd_seas.index.values.astype(float)
-y = vpd_seas.values
-
-# Fraction of data used by LOESS
-# Approximately equivalent to a smooth_years window
+x = multi.index.values.astype(float)
+y = multi.values
 
 frac = smooth_years / len(x)
 
-# ----------------------------------------------------------
-# LOESS smooth
-# ----------------------------------------------------------
+# ------------------------------------------------------------------
+# LOESS fit
+# ------------------------------------------------------------------
 
 y_loess = lowess(
     y,
@@ -1805,23 +901,22 @@ def moving_block_bootstrap(residuals, block_length):
 
     return np.array(bootstrap[:n])
 
-
-
-
-block_length = 5
+# ------------------------------------------------------------------
+# Block-bootstrap confidence intervals
+# ------------------------------------------------------------------
 
 residuals = y - y_loess
 
-boot_loess = np.zeros((nboot, len(y)))
+boot_loess = np.zeros(
+    (nboot, len(y))
+)
 
 for iboot in range(nboot):
 
-    # Resample residuals with replacement (block bootstrap)
-
     boot_resid = moving_block_bootstrap(
         residuals,
-        block_length=5
-        )
+        block_length
+    )
 
     y_boot = y_loess + boot_resid
 
@@ -1831,8 +926,6 @@ for iboot in range(nboot):
         frac=frac,
         return_sorted=False
     )
-
-# 95% confidence interval
 
 ci_lower = np.percentile(
     boot_loess,
@@ -1846,43 +939,64 @@ ci_upper = np.percentile(
     axis=0
 )
 
-# ----------------------------------------------------------
-# Plot
-# ----------------------------------------------------------
+# ------------------------------------------------------------------
+# Plot comparison
+# ------------------------------------------------------------------
 
 fig, ax = plt.subplots(
-    figsize=(10,4)
+    figsize=(10,5)
 )
 
-# Bootstrap confidence band
+# Individual datasets
+
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["CRU-TS_adj"],
+    color="tab:blue",
+    lw=1.5,
+    alpha=0.7,
+    label="CRU-TS"
+)
+
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["HadUK_adj"],
+    color="tab:orange",
+    lw=1.5,
+    alpha=0.7,
+    label="HadUK-Grid"
+)
+
+ax.plot(
+    compare_adj_df.index,
+    compare_adj_df["ERA5_adj"],
+    color="tab:green",
+    lw=1.5,
+    alpha=0.7,
+    label="ERA5"
+)
+
+# Bootstrap CI
 
 ax.fill_between(
     x,
     ci_lower,
     ci_upper,
-    color="darkgreen",
+    color="black",
     alpha=0.15,
-    label="95% bootstrap CI"
+    label="Sampling uncertainty in long-term changes"
+#    label="95% LOESS CI"
 )
 
-# Raw seasonal values
-
-ax.plot(
-    x,
-    y,
-    color="dimgrey",
-    lw=0.8,
-    label=f"{seas_name} mean"
-)
-
-# LOESS smooth
+# Smoothed multi-dataset average
 
 ax.plot(
     x,
     y_loess,
-    color="darkgreen",
+    color="black",
     lw=3,
-    label=f"{smooth_years}-yr LOESS"
+    label="Underlying long-term climate changes"
+#    label=f"{smooth_years}-yr LOESS (dataset mean)"
 )
 
 ax.set_ylabel("VPD (hPa)")
@@ -1895,17 +1009,63 @@ ax.grid(
 
 ax.legend()
 
-fig.suptitle(
-    f"Seasonal VPD ({seas_name})\n"
-    f"HadUK-Grid River Basin Region: {regname}"
+ax.set_title(
+    f"Seasonal ({seas_name}) Vapour Pressure Deficit (VPD) for {had_regname} region"
 )
 
-fig.tight_layout()
+fig.text(
+    0.01,
+    0.010,
+    "CRU-TS and ERA5 were linearly transformed to "
+    "match the HadUK-Grid mean and standard deviation over the common overlap period.",
+    ha="left",
+    va="bottom",
+    fontsize=8,
+    color="0.4"
+)
+
+fig.text(
+    0.01,
+    0.040,
+    "Analysis by Climatic Research Unit UEA. "
+    "Datasets: CRU-TS (UEA), HadUK-Grid (Met Office), ERA5 (ECMWF). "
+    "Only ERA5 currently has data for 2026.",
+    ha="left",
+    va="bottom",
+    fontsize=8,
+    color="0.4"
+)
+
+plt.tight_layout(rect=[0, 0.06, 1, 1])
+
+
+# ------------------------------------------------------------------
+# Create filename
+# ------------------------------------------------------------------
+
+region_safe = had_regname.replace(" ", "_")
+season_safe = seas_name.replace(" ", "_")
+
+
+outfile = (
+    f"VPD_{region_safe}_{season_safe}"
+    f"_smooth{smooth_years}yr"
+    f"_adj{adjust_means}.pdf"
+)
+
+
+# ------------------------------------------------------------------
+# Save figure
+# ------------------------------------------------------------------
+
+fig.savefig(
+    outfile,
+    bbox_inches="tight"
+)
+
+print(f"Saved: {outfile}")
+
 
 plt.show()
-
-
-
-
 
 
