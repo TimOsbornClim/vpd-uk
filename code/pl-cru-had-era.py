@@ -62,14 +62,20 @@ from climate_analysis_functions import saturation_vapour_pressure
 #seas_name = "Febraury-July"
 #seas_def = [2,3,4,5,6,7]
 
-seas_name = "April-July"
-seas_def = [4,5,6,7]
+#seas_name = "April-July"
+#seas_def = [4,5,6,7]
+
+#seas_name = "April-August"
+#seas_def = [4,5,6,7,8]
+
+seas_name = "April-September"
+seas_def = [4,5,6,7,8,9]
 
 # Adjust means to match HadUK?
 # 0 = no adjustment (not yet suppoprted)
 # 1 = means adjusted by additive offset
-# 2 = means adjusted by ultiplicative scaling factor
-# 3 = means and SDs adjusted by offset then scaling then offset
+# 2 = means adjusted by multiplicative scaling factor
+# 3 = means and SDs adjusted by centering then scaling then offset
 
 adjust_means = 3
 
@@ -256,8 +262,19 @@ cru_df["vpd"] = cru_df["vpd"].clip(lower=0.0)
 
 
 # ------------------------------------------------------------------
-#%% Example output
+#%% Example output, create metadata and output csv
 # ------------------------------------------------------------------
+
+# Specify units
+
+cru_df.attrs["units"] = {
+    "tmp": "degC",
+    "vap": "hPa",
+    "es":  "hPa",
+    "vpd": "hPa"
+}
+
+cru_df.index.name = "time"
 
 print(cru_df.head())
 
@@ -265,7 +282,42 @@ print(cru_df.head())
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-# cru_df.to_csv("cru-ts_norwich_vpd_timeseries.csv")
+from datetime import datetime
+
+outfile = "cru-ts_norwich_vpd_timeseries-monthly.csv"
+
+# Determine period automatically
+
+start_date = cru_df.index.min().strftime("%Y-%m")
+end_date   = cru_df.index.max().strftime("%Y-%m")
+
+# Creation date
+
+creation_date = datetime.now().strftime("%Y-%m-%d")
+
+# Grid-cell metadata (if present)
+
+grid_lat = cru_df.attrs.get("grid_lat", "unknown")
+grid_lon = cru_df.attrs.get("grid_lon", "unknown")
+# Units
+
+units = cru_df.attrs["units"]
+
+with open(outfile, "w") as f:
+
+    f.write("# Dataset:, CRU-TS v4.10\n")
+    f.write(f"# Grid cell:, {grid_lat:.2f}N, {grid_lon:.2f}E\n")
+    f.write(f"# Period:, {start_date} to {end_date}\n")
+    f.write("# Variables:, " + ",".join(cru_df.columns) + "\n")
+    f.write("# Units:, " + ",".join(units[col] for col in cru_df.columns) + "\n")
+    f.write(f"# Created:, {creation_date}\n")
+
+    cru_df.to_csv(
+        f,
+        float_format="%.5f",
+        date_format="%Y-%m"
+    )
+
 
 
 
@@ -390,8 +442,20 @@ era_df["vpd"] = era_df["vpd"].clip(lower=0.0)
 
 
 # ------------------------------------------------------------------
-#%% Example output
+#%% Example output, create metadata and output csv
 # ------------------------------------------------------------------
+
+# Specify units
+
+era_df.attrs["units"] = {
+    "tmp": "degC",
+    "dpt": "degC",
+    "es": "hPa",
+    "vap": "hPa",
+    "vpd": "hPa"
+}
+
+era_df.index.name = "time"
 
 print(era_df.head())
 
@@ -399,7 +463,42 @@ print(era_df.head())
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-# df.to_csv("era5_norwich_vpd_timeseries.csv")
+outfile = "era5_norwich_vpd_timeseries-monthly.csv"
+
+# Determine period automatically
+
+start_date = era_df.index.min().strftime("%Y-%m")
+end_date   = era_df.index.max().strftime("%Y-%m")
+
+# Creation date
+
+creation_date = datetime.now().strftime("%Y-%m-%d")
+
+# Grid-cell metadata (if present)
+
+grid_lat = era_df.attrs.get("grid_lat", "unknown")
+grid_lon = era_df.attrs.get("grid_lon", "unknown")
+
+# Units
+
+units = era_df.attrs["units"]
+
+with open(outfile, "w") as f:
+
+    f.write("# Dataset:, ERA5\n")
+    f.write(f"# Grid cell:, {grid_lat:.2f}N, {grid_lon:.2f}E\n")
+    f.write(f"# Period:, {start_date} to {end_date}\n")
+    f.write("# Variables:, " + ",".join(era_df.columns) + "\n")
+    f.write("# Units:, " + ",".join(units[col] for col in era_df.columns) + "\n")
+    f.write(f"# Created:, {creation_date}\n")
+
+    era_df.to_csv(
+        f,
+        float_format="%.5f",
+        date_format="%Y-%m"
+    )
+
+
 
 
 
@@ -518,8 +617,19 @@ had_df["vpd"] = had_df["vpd"].clip(lower=0.0)
 
 
 # ------------------------------------------------------------------
-#%% Example output
+#%% HadUK-Grid example output, create metadata and output csv
 # ------------------------------------------------------------------
+
+# Specify units
+
+had_df.attrs["units"] = {
+    "tmp": "degC",
+    "vap": "hPa",
+    "es":  "hPa",
+    "vpd": "hPa"
+}
+
+had_df.index.name = "time"
 
 print(had_df.head())
 
@@ -527,7 +637,35 @@ print(had_df.head())
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-# had_df.to_csv("HadUK-grid-norwich_vpd_timeseries.csv")
+outfile = f"HadUK-grid_{had_regname}_vpd_timeseries-monthly.csv"
+
+# Determine period automatically
+
+start_date = had_df.index.min().strftime("%Y-%m")
+end_date   = had_df.index.max().strftime("%Y-%m")
+
+# Creation date
+
+creation_date = datetime.now().strftime("%Y-%m-%d")
+
+# Units
+
+units = had_df.attrs["units"]
+
+with open(outfile, "w") as f:
+
+    f.write("# Dataset:, HadUK-Grid\n")
+    f.write(f"# Spatial location:, {had_regname}\n")
+    f.write(f"# Period:, {start_date} to {end_date}\n")
+    f.write("# Variables:, " + ",".join(had_df.columns) + "\n")
+    f.write("# Units:, " + ",".join(units[col] for col in had_df.columns) + "\n")
+    f.write(f"# Created:, {creation_date}\n")
+
+    had_df.to_csv(
+        f,
+        float_format="%.5f",
+        date_format="%Y-%m"
+    )
 
 
 
@@ -763,6 +901,36 @@ compare_adj_df["MULTI"] = (
     ]
     .mean(axis=1)
 )
+
+
+
+# ------------------------------------------------------------------
+#%% Multi-datasets included adjusted output csv
+# ------------------------------------------------------------------
+
+outfile = f"multidataset_vpd_timeseries_{seas_name}.csv"
+
+with open(outfile, "w") as f:
+
+    f.write("# Datasets:, CRU-TS v4.10, HadUK-Grid, ERA5\n")
+    f.write(f"# Spatial location:, Norwich grid cell, {had_regname} region, Norwich grid cell\n")
+    f.write("# Variables:, vapour pressure deficit\n")
+    f.write("# Units:, hPa\n")
+    f.write("# Notes:, Values are given for vpd calculated directly from each dataset "
+            + "as well as after each dataset has been linearly transformed so that its "
+            + "mean and variance match HadUK-Grid over their common overlap period. "
+            + "The multi-dataset mean of the three adjusted datasets is the final column.\n")
+
+    compare_adj_df.to_csv(
+        f,
+        float_format="%.5f"
+    )
+
+
+
+
+
+
 
 
 

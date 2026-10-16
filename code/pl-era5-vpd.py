@@ -742,13 +742,20 @@ plt.show()
 #seas_name = "March-June"
 #seas_def = [3,4,5,6]
 
-seas_name = "March-July"
-seas_def = [3,4,5,6,7]
+#seas_name = "March-July"
+#seas_def = [3,4,5,6,7]
 
 #seas_name = "Febraury-July"
 #seas_def = [2,3,4,5,6,7]
 
+#seas_name = "April-July"
+#seas_def = [4,5,6,7]
 
+#seas_name = "April-August"
+#seas_def = [4,5,6,7,8]
+
+seas_name = "April-September"
+seas_def = [4,5,6,7,8,9]
 
 vpd_seas = seasonal_mean(df["vpd"], seas_def)
 print(vpd_seas.head())
@@ -758,7 +765,7 @@ print(vpd_seas.head())
 # Parameters
 # ----------------------------------------------------------
 
-smooth_years = 30
+smooth_years = 20
 nboot = 1000       # usually choose 1000
 
 # ----------------------------------------------------------

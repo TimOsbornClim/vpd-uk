@@ -20,7 +20,7 @@ era5_path = "/Users/f055/Documents/data/ERA5/"
 lat = 52.75
 lon = 1.25
 
-syr = 2026
+syr = 1940
 eyr = 2026
 
 outfile = (
