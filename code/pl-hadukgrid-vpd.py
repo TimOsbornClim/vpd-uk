@@ -43,6 +43,7 @@ import cartopy.feature as cfeature
 
 # Region of interest
 regname = "Anglian"
+# regname = "Thames"
 
 # Period to extract
 start_year = 1961
@@ -511,11 +512,14 @@ plt.show()
 #%% Create seasonal-mean timeseries plots, with smoothed line too
 # ----------------------------------------------------------
 
-seas_name = "March-June"
-seas_def = [3,4,5,6]
+#seas_name = "March-June"
+#seas_def = [3,4,5,6]
 
 #seas_name = "March-July"
 #seas_def = [3,4,5,6,7]
+
+seas_name = "April-July"
+seas_def = [4,5,6,7]
 
 vpd_seas = seasonal_mean(df["vpd"], seas_def)
 print(vpd_seas.head())

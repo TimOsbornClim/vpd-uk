@@ -502,11 +502,15 @@ plt.show()
 #%% Create seasonal-mean timeseries plots
 # ----------------------------------------------------------
 
-seas_name = "March-June"
-seas_def = [3,4,5,6]
+#seas_name = "March-June"
+#seas_def = [3,4,5,6]
 
 #seas_name = "March-July"
 #seas_def = [3,4,5,6,7]
+
+seas_name = "April-July"
+seas_def = [4,5,6,7]
+
 
 tmp_seas = seasonal_mean(tmp, seas_def)
 vap_seas = seasonal_mean(vap, seas_def)
@@ -565,11 +569,14 @@ plt.show()
 #%% Create seasonal-mean timeseries plots, with smoothed line too
 # ----------------------------------------------------------
 
-seas_name = "March-June"
-seas_def = [3,4,5,6]
+#seas_name = "March-June"
+#seas_def = [3,4,5,6]
 
 #seas_name = "March-July"
 #seas_def = [3,4,5,6,7]
+
+seas_name = "April-July"
+seas_def = [4,5,6,7]
 
 vpd_seas = seasonal_mean(df["vpd"], seas_def)
 print(vpd_seas.head())
@@ -719,8 +726,11 @@ plt.show()
 #seas_name = "March-June"
 #seas_def = [3,4,5,6]
 
-seas_name = "March-July"
-seas_def = [3,4,5,6,7]
+#seas_name = "March-July"
+#seas_def = [3,4,5,6,7]
+
+seas_name = "April-July"
+seas_def = [4,5,6,7]
 
 vpd_seas = seasonal_mean(df["vpd"], seas_def)
 print(vpd_seas.head())
@@ -730,7 +740,7 @@ print(vpd_seas.head())
 # Parameters
 # ----------------------------------------------------------
 
-smooth_years = 30
+smooth_years = 20
 nboot = 1000       # usually choose 1000
 
 # ----------------------------------------------------------

@@ -13,6 +13,7 @@ average, and ERA5 grid cell, then compare and plot them together.
 #%% Get packages and functions
 # ------------------------------------------------------------------
 
+import os
 
 import numpy as np
 import pandas as pd
