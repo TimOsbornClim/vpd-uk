@@ -13,7 +13,8 @@ average, and ERA5 grid cell, then compare and plot them together.
 #%% Get packages and functions
 # ------------------------------------------------------------------
 
-import os
+# May need this for making paths etc
+# import os
 
 import numpy as np
 import pandas as pd
@@ -21,8 +22,9 @@ import xarray as xr
 
 import matplotlib.pyplot as plt
 
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
+# These are needed if we plot maps etc.
+#import cartopy.crs as ccrs
+#import cartopy.feature as cfeature
 
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
@@ -43,6 +45,11 @@ from climate_analysis_functions import saturation_vapour_pressure
 # ------------------------------------------------------------------
 #%% User settings
 # ------------------------------------------------------------------
+
+# Where to put output files? These are paths relative to where the codes is begin run.
+
+imgdir='../images-local/'
+outdir='../output-local/'
 
 
 # What season to focus on?
@@ -262,7 +269,7 @@ cru_df["vpd"] = cru_df["vpd"].clip(lower=0.0)
 
 
 # ------------------------------------------------------------------
-#%% Example output, create metadata and output csv
+#%% CRU-TS Example output, create metadata and output csv
 # ------------------------------------------------------------------
 
 # Specify units
@@ -284,7 +291,7 @@ print(cru_df.head())
 
 from datetime import datetime
 
-outfile = "cru-ts_norwich_vpd_timeseries-monthly.csv"
+outfile = outdir+"cru-ts_norwich_vpd_timeseries-monthly.csv"
 
 # Determine period automatically
 
@@ -463,7 +470,7 @@ print(era_df.head())
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-outfile = "era5_norwich_vpd_timeseries-monthly.csv"
+outfile = outdir+"era5_norwich_vpd_timeseries-monthly.csv"
 
 # Determine period automatically
 
@@ -637,7 +644,7 @@ print(had_df.head())
 # Optional: save to CSV
 # ------------------------------------------------------------------
 
-outfile = f"HadUK-grid_{had_regname}_vpd_timeseries-monthly.csv"
+outfile = outdir + f"HadUK-grid_{had_regname}_vpd_timeseries-monthly.csv"
 
 # Determine period automatically
 
@@ -908,7 +915,11 @@ compare_adj_df["MULTI"] = (
 #%% Multi-datasets included adjusted output csv
 # ------------------------------------------------------------------
 
-outfile = f"multidataset_vpd_timeseries_{seas_name}.csv"
+outfile = outdir + f"multidataset_vpd_timeseries_{seas_name}.csv"
+
+# Creation date
+
+creation_date = datetime.now().strftime("%Y-%m-%d")
 
 with open(outfile, "w") as f:
 
@@ -920,6 +931,7 @@ with open(outfile, "w") as f:
             + "as well as after each dataset has been linearly transformed so that its "
             + "mean and variance match HadUK-Grid over their common overlap period. "
             + "The multi-dataset mean of the three adjusted datasets is the final column.\n")
+    f.write(f"# Created:, {creation_date}\n")
 
     compare_adj_df.to_csv(
         f,
@@ -1216,7 +1228,7 @@ region_safe = had_regname.replace(" ", "_")
 season_safe = seas_name.replace(" ", "_")
 
 
-outfile = (
+outfile = imgdir + (
     f"VPD_{region_safe}_{season_safe}"
     f"_smooth{smooth_years}yr"
     f"_adj{adjust_means}.pdf"
@@ -1224,7 +1236,7 @@ outfile = (
 
 
 # ------------------------------------------------------------------
-# Save figure
+# Save figure as PDF
 # ------------------------------------------------------------------
 
 fig.savefig(
